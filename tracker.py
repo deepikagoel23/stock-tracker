@@ -15,7 +15,22 @@ def send_telegram(msg):
     requests.post(url, data={"chat_id": CHAT_ID, "text": msg})
 
 def check_stock():
-    return True
+    options = Options()
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+
+    driver = webdriver.Chrome(options=options)
+    driver.get(URL)
+    time.sleep(6)
+
+    page_text = driver.page_source.lower()
+    driver.quit()
+
+    # 🔥 BigBasket detection logic
+    if "add to basket" in page_text:
+        return True
+    return False
 
 
 print("🔍 Checking stock...")
