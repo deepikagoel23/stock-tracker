@@ -6,11 +6,10 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
 # ===== CONFIG =====
-URL = "https://www.bigbasket.com/pd/40356301/apple-iphone-17-256gb-white-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10"
-BOT_TOKEN = "8711989091:AAHVL-8-273rEIRl6j4q9KP-iNkvkhaaXr"
+URL = "https://www.bigbasket.com/pd/40356301/apple-iphone-17-256gb-white-1-unit/"
+BOT_TOKEN = "8711989091:AAGYuhXt2eLt6k_-De__-DcvtDyJYAw6RDA"
 CHAT_ID = "6809727939"
 
-# ⭐ PUT YOUR 4 PINCODES HERE
 PINCODE_LIST = ["122001", "122002", "122018", "122015"]
 # ==================
 
@@ -25,11 +24,13 @@ def send_telegram(message):
 
 def setup_driver():
     chrome_options = Options()
-    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument(
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+    )
 
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
@@ -39,20 +40,33 @@ def setup_driver():
 
 
 def set_location(driver, pincode):
-    """Set BigBasket pincode"""
+    """Robust location setter"""
     try:
         driver.get("https://www.bigbasket.com/")
-        time.sleep(5)
+        time.sleep(6)
 
-        box = driver.find_element(
-            "xpath", "//input[@placeholder='Enter your pincode']"
-        )
-        box.clear()
-        box.send_keys(pincode)
+        inputs = driver.find_elements("xpath", "//input")
+
+        target = None
+        for inp in inputs:
+            placeholder = (inp.get_attribute("placeholder") or "").lower()
+            if "pincode" in placeholder:
+                target = inp
+                break
+
+        if not target:
+            print(f"⚠️ Pincode box not found for {pincode}")
+            return
+
+        target.clear()
+        target.send_keys(pincode)
         time.sleep(3)
 
-        driver.find_element("xpath", "(//li)[1]").click()
-        time.sleep(5)
+        # click first suggestion safely
+        suggestions = driver.find_elements("xpath", "//li")
+        if suggestions:
+            suggestions[0].click()
+            time.sleep(5)
 
         print(f"📍 Location set: {pincode}")
 
@@ -67,12 +81,17 @@ def check_stock_for_pincode(pincode):
         set_location(driver, pincode)
 
         driver.get(URL)
-        time.sleep(8)
+        time.sleep(10)
 
         page_text = driver.page_source.lower()
 
-        if "add to basket" in page_text:
+        # stronger detection
+        if any(word in page_text for word in ["out of stock", "sold out"]):
+            return False
+
+        if any(word in page_text for word in ["add to basket", "add to cart", ">add<"]):
             return True
+
         return False
 
     finally:
