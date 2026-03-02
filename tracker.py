@@ -93,7 +93,7 @@ try:
 
             if in_stock:
                 found_any = True
-                msg = f"🟢 iPhone 16 is IN STOCK at pincode {pin}!"
+                msg = f"🟢 iPhone 17 is IN STOCK at pincode {pin}!"
                 print(msg)
                 send_telegram(msg)
 
