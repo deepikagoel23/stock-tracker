@@ -1,36 +1,69 @@
 import time
+import os
 import requests
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 
-# ===== CONFIG =====
-URL = "https://www.bigbasket.com/pd/40356301/apple-iphone-17-256gb-white-1-unit/"
-BOT_TOKEN = "8711989091:AAGYuhXt2eLt6k_-De__-DcvtDyJYAw6RDA"
-CHAT_ID = "6809727939"
+# ================= CONFIG =================
 
+# 🛒 PRODUCTS TO TRACK
+PRODUCTS = [
+    {
+        "name": "iPhone 17 White",
+        "url": "https://www.bigbasket.com/pd/40356301/apple-iphone-17-256gb-white-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+    },
+    {
+        "name": "iPhone 16 Black",
+        "url": "https://www.bigbasket.com/pd/40330602/apple-iphone-16-128gb-black-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+    },
+]
+
+# 👥 TELEGRAM USERS
+CHAT_IDS = [
+    os.getenv("CHAT_ID_1"),
+    os.getenv("CHAT_ID_2"),
+]
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+# 📍 PINCODES
 PINCODE_LIST = ["122001", "122002", "122018", "122015"]
-# ==================
+
+# ===========================================
+
+# Anti-spam memory (per product + per pincode)
+last_stock_state = {
+    product["name"]: {pin: False for pin in PINCODE_LIST}
+    for product in PRODUCTS
+}
 
 
 def send_telegram(message):
+    """Send message to all users"""
     api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    try:
-        requests.post(api_url, data={"chat_id": CHAT_ID, "text": message}, timeout=10)
-    except Exception as e:
-        print("Telegram error:", e)
+
+    for chat_id in CHAT_IDS:
+        if not chat_id:
+            continue
+        try:
+            requests.post(
+                api_url,
+                data={"chat_id": chat_id, "text": message},
+                timeout=10,
+            )
+        except Exception as e:
+            print("Telegram error:", e)
 
 
 def setup_driver():
+    """Setup headless Chrome"""
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument(
-        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-    )
 
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
@@ -40,33 +73,20 @@ def setup_driver():
 
 
 def set_location(driver, pincode):
-    """Robust location setter"""
+    """Set BigBasket pincode"""
     try:
         driver.get("https://www.bigbasket.com/")
-        time.sleep(6)
+        time.sleep(5)
 
-        inputs = driver.find_elements("xpath", "//input")
-
-        target = None
-        for inp in inputs:
-            placeholder = (inp.get_attribute("placeholder") or "").lower()
-            if "pincode" in placeholder:
-                target = inp
-                break
-
-        if not target:
-            print(f"⚠️ Pincode box not found for {pincode}")
-            return
-
-        target.clear()
-        target.send_keys(pincode)
+        box = driver.find_element(
+            "xpath", "//input[@placeholder='Enter your pincode']"
+        )
+        box.clear()
+        box.send_keys(pincode)
         time.sleep(3)
 
-        # click first suggestion safely
-        suggestions = driver.find_elements("xpath", "//li")
-        if suggestions:
-            suggestions[0].click()
-            time.sleep(5)
+        driver.find_element("xpath", "(//li)[1]").click()
+        time.sleep(5)
 
         print(f"📍 Location set: {pincode}")
 
@@ -74,53 +94,42 @@ def set_location(driver, pincode):
         print(f"Location error ({pincode}):", e)
 
 
-def check_stock_for_pincode(pincode):
+def check_stock_for_pincode(url, pincode):
+    """Check stock for one product + one pincode"""
     driver = setup_driver()
 
     try:
         set_location(driver, pincode)
-
-        driver.get(URL)
-        time.sleep(10)
+        driver.get(url)
+        time.sleep(8)
 
         page_text = driver.page_source.lower()
-
-        # stronger detection
-        if any(word in page_text for word in ["out of stock", "sold out"]):
-            return False
-
-        if any(word in page_text for word in ["add to basket", "add to cart", ">add<"]):
-            return True
-
-        return False
+        return "add to basket" in page_text
 
     finally:
         driver.quit()
 
 
-# ===== MAIN =====
-print("🔍 Checking BigBasket stock for multiple pincodes...")
+# ================= MAIN =================
 
-try:
-    found_any = False
+print("🚀 Multi-product tracker started...")
+
+for product in PRODUCTS:
+    print(f"\n🛒 Checking product: {product['name']}")
 
     for pin in PINCODE_LIST:
-        print(f"\nChecking pincode: {pin}")
+        print(f"🔍 Checking pincode: {pin}")
 
         try:
-            in_stock = check_stock_for_pincode(pin)
+            in_stock = check_stock_for_pincode(product["url"], pin)
 
-            if in_stock:
-                found_any = True
-                msg = f"🟢 iPhone 17 is IN STOCK at pincode {pin}!"
+            # ✅ Anti-spam (within this run)
+            if in_stock and not last_stock_state[product["name"]][pin]:
+                msg = f"🟢 {product['name']} is IN STOCK at pincode {pin}!"
                 print(msg)
                 send_telegram(msg)
 
+            last_stock_state[product["name"]][pin] = in_stock
+
         except Exception as e:
             print(f"Error checking {pin}:", e)
-
-    if not found_any:
-        print("❌ Out of stock in all pincodes")
-
-except Exception as err:
-    print("❌ Script error:", err)
