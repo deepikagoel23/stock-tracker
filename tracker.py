@@ -15,10 +15,10 @@ PRODUCTS = [
     },
 ]
 
-CHAT_IDS = [
+CHAT_IDS = list(set([
     os.getenv("CHAT_ID_1"),
     os.getenv("CHAT_ID_2"),
-]
+]))
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
@@ -32,6 +32,7 @@ HEADERS = {
 
 
 def send_telegram(message):
+    """Send message to all users"""
     api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
     for chat_id in CHAT_IDS:
@@ -48,16 +49,12 @@ def send_telegram(message):
 
 
 def check_stock(url, pincode):
-    """Fast stock check using requests"""
-
+    """Fast stock check"""
     try:
         session = requests.Session()
-
-        # Set location cookie (important)
         session.cookies.set("bb-location", pincode)
 
         r = session.get(url, headers=HEADERS, timeout=15)
-
         text = r.text.lower()
 
         return "add to basket" in text
@@ -69,19 +66,36 @@ def check_stock(url, pincode):
 
 # ================= MAIN =================
 
-print("⚡ Ultra-fast tracker started...")
+print("⚡ Combined tracker started...")
 
-for pin in PINCODE_LIST:
-    print(f"\n📍 Checking pincode: {pin}")
+stock_found = {}
 
-    for product in PRODUCTS:
-        print(f"🛒 Checking: {product['name']}")
+for product in PRODUCTS:
+    available_pins = []
 
-        in_stock = check_stock(product["url"], pin)
+    for pin in PINCODE_LIST:
+        print(f"🔍 {product['name']} → {pin}")
 
-        if in_stock:
-            msg = f"🟢 {product['name']} is IN STOCK at pincode {pin}!"
-            print(msg)
-            send_telegram(msg)
+        if check_stock(product["url"], pin):
+            available_pins.append(pin)
 
-        time.sleep(2)  # small polite delay
+        time.sleep(2)
+
+    if available_pins:
+        stock_found[product["name"]] = available_pins
+
+
+# ===== SEND ONLY ONE MESSAGE =====
+
+if stock_found:
+    message = "🟢 STOCK AVAILABLE:\n\n"
+
+    for name, pins in stock_found.items():
+        pin_list = ", ".join(pins)
+        message += f"• {name} → {pin_list}\n"
+
+    print(message)
+    send_telegram(message)
+
+else:
+    print("❌ Nothing in stock")
