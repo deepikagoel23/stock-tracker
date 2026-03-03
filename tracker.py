@@ -1,38 +1,37 @@
+import time
 import os
 import requests
-import time
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 
 # ================= CONFIG =================
 
 PRODUCTS = [
     {
         "name": "iPhone 17 White",
-        "url": "https://www.bigbasket.com/pd/40356301/",
+        "url": "https://www.bigbasket.com/pd/40356301/apple-iphone-17-256gb-white-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
     },
     {
         "name": "iPhone 16 Black",
-        "url": "https://www.bigbasket.com/pd/40330602/",
+        "url": "https://www.bigbasket.com/pd/40330602/apple-iphone-16-128gb-black-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
     },
 ]
 
-CHAT_IDS = list(set([
+CHAT_IDS = [
     os.getenv("CHAT_ID_1"),
     os.getenv("CHAT_ID_2"),
-]))
+]
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 PINCODE_LIST = ["122001", "122002", "122018", "122015"]
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
-}
-
 # ===========================================
 
 
 def send_telegram(message):
-    """Send message to all users"""
     api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
     for chat_id in CHAT_IDS:
@@ -48,70 +47,75 @@ def send_telegram(message):
             print("Telegram error:", e)
 
 
-def check_stock(url, pincode):
-    """More reliable stock check"""
+def setup_driver():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
 
+    driver = webdriver.Chrome(
+        service=Service(ChromeDriverManager().install()),
+        options=chrome_options,
+    )
+    return driver
+
+
+def set_location(driver, pincode):
     try:
-        session = requests.Session()
-        session.cookies.set("bb-location", pincode)
+        driver.get("https://www.bigbasket.com/")
+        time.sleep(5)
 
-        r = session.get(url, headers=HEADERS, timeout=15)
-        text = r.text.lower()
+        box = driver.find_element(
+            "xpath", "//input[@placeholder='Enter your pincode']"
+        )
+        box.clear()
+        box.send_keys(pincode)
+        time.sleep(3)
 
-        # 🚨 FIRST check for OUT OF STOCK signals
-        out_of_stock_signals = [
-            "out of stock",
-            "currently unavailable",
-            "not deliverable",
-            "sold out",
-            "unavailable",
-        ]
+        driver.find_element("xpath", "(//li)[1]").click()
+        time.sleep(5)
 
-        if any(signal in text for signal in out_of_stock_signals):
-            return False
+        print(f"📍 Location set: {pincode}")
 
-        # ✅ THEN check for positive signal
-        if "add to basket" in text:
-            return True
+    except Exception as e:
+        print(f"Location error ({pincode}):", e)
 
-        return False
+
+def check_stock(driver, url):
+    try:
+        driver.get(url)
+        time.sleep(6)
+
+        page_text = driver.page_source.lower()
+        return "add to basket" in page_text
 
     except Exception as e:
         print("Stock check error:", e)
         return False
 
+
 # ================= MAIN =================
 
-print("⚡ Combined tracker started...")
+print("🚀 Optimized multi-product tracker started...")
 
-stock_found = {}
+for pin in PINCODE_LIST:
+    print(f"\n🔍 Checking pincode: {pin}")
 
-for product in PRODUCTS:
-    available_pins = []
+    driver = setup_driver()
 
-    for pin in PINCODE_LIST:
-        print(f"🔍 {product['name']} → {pin}")
+    try:
+        set_location(driver, pin)
 
-        if check_stock(product["url"], pin):
-            available_pins.append(pin)
+        for product in PRODUCTS:
+            print(f"🛒 Checking product: {product['name']}")
 
-        time.sleep(2)
+            in_stock = check_stock(driver, product["url"])
 
-    if available_pins:
-        stock_found[product["name"]] = available_pins
+            if in_stock:
+                msg = f"🟢 {product['name']} is IN STOCK at pincode {pin}!"
+                print(msg)
+                send_telegram(msg)
 
-
-# ===== SEND ONLY ONE MESSAGE =====
-
-if stock_found:
-    message = "🟢 STOCK AVAILABLE:\n\n"
-
-    for name, pins in stock_found.items():
-        pin_list = ", ".join(pins)
-        message += f"• {name} → {pin_list}\n"
-
-    print(message)
-    send_telegram(message)
-
-else:
-    print("❌ Nothing in stock")
+    finally:
+        driver.quit()
