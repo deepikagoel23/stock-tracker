@@ -49,7 +49,9 @@ def send_telegram(message):
 
 
 def check_stock(url, pincode):
-    """Fast stock check"""
+    def check_stock(url, pincode):
+    """More reliable stock check"""
+
     try:
         session = requests.Session()
         session.cookies.set("bb-location", pincode)
@@ -57,7 +59,23 @@ def check_stock(url, pincode):
         r = session.get(url, headers=HEADERS, timeout=15)
         text = r.text.lower()
 
-        return "add to basket" in text
+        # 🚨 FIRST check for OUT OF STOCK signals
+        out_of_stock_signals = [
+            "out of stock",
+            "currently unavailable",
+            "not deliverable",
+            "sold out",
+            "unavailable",
+        ]
+
+        if any(signal in text for signal in out_of_stock_signals):
+            return False
+
+        # ✅ THEN check for positive signal
+        if "add to basket" in text:
+            return True
+
+        return False
 
     except Exception as e:
         print("Stock check error:", e)
