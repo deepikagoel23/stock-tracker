@@ -49,7 +49,6 @@ def send_telegram(message):
 
 
 def check_stock(url, pincode):
-    def check_stock(url, pincode):
     """More reliable stock check"""
 
     try:
@@ -80,7 +79,6 @@ def check_stock(url, pincode):
     except Exception as e:
         print("Stock check error:", e)
         return False
-
 
 # ================= MAIN =================
 
