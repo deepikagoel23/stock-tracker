@@ -1,9 +1,11 @@
 name: BigBasket Stock Checker
 
 on:
+  # Keep your existing schedules
   schedule:
-    - cron: "*/10 * * * *" 
-    - cron: "5-59/10 * * * *" # runs every 10 minutes
+    - cron: "*/10 * * * *"      # every 10 minutes
+    - cron: "5-59/10 * * * *"   # every 10 minutes offset by 5 minutes
+  # Add workflow_dispatch to allow external/API triggers
   workflow_dispatch:
 
 jobs:
@@ -32,4 +34,6 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID_1: ${{ secrets.CHAT_ID_1 }}
           CHAT_ID_2: ${{ secrets.CHAT_ID_2 }}
-        run: python tracker.py
+        run: |
+          echo "Workflow triggered at: $(date)"  # log timestamp for verification
+          python tracker.py
