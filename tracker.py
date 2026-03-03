@@ -17,6 +17,24 @@ PRODUCTS = [
         "name": "iPhone 16 Black",
         "url": "https://www.bigbasket.com/pd/40330602/apple-iphone-16-128gb-black-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
     },
+
+    {
+        "name": "iPhone 17 Black",
+        "url": "https://www.bigbasket.com/pd/40356300/apple-iphone-17-256gb-black-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+    },
+    {
+        "name": "iPhone 17 mist blue",
+        "url": "https://www.bigbasket.com/pd/40356302/apple-iphone-17-256gb-mist-blue-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10"
+    },
+    {
+        "name": "iPhone 16 ultramarine",
+        "url": "https://www.bigbasket.com/pd/40330605/apple-iphone-16-128gb-ultramarine-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+    },
+    {
+        "name": "iPhone 16 Teal",
+        "url": "https://www.bigbasket.com/pd/40330606/apple-iphone-16-128gb-teal-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+    },
+
 ]
 
 CHAT_IDS = [
@@ -71,10 +89,10 @@ def set_location(driver, pincode):
         )
         box.clear()
         box.send_keys(pincode)
-        time.sleep(3)
+        time.sleep(2)
 
         driver.find_element("xpath", "(//li)[1]").click()
-        time.sleep(5)
+        time.sleep(4)
 
         print(f"📍 Location set: {pincode}")
 
@@ -85,7 +103,7 @@ def set_location(driver, pincode):
 def check_stock(driver, url):
     try:
         driver.get(url)
-        time.sleep(6)
+        time.sleep(5)
 
         page_text = driver.page_source.lower()
         return "add to basket" in page_text
@@ -102,7 +120,8 @@ print("🚀 Optimized multi-product tracker started...")
 for pin in PINCODE_LIST:
     print(f"\n🔍 Checking pincode: {pin}")
 
-    driver = setup_driver()
+    driver = setup_driver()  # ✅ ONE driver per pincode
+    in_stock_items = []
 
     try:
         set_location(driver, pin)
@@ -110,12 +129,19 @@ for pin in PINCODE_LIST:
         for product in PRODUCTS:
             print(f"🛒 Checking product: {product['name']}")
 
-            in_stock = check_stock(driver, product["url"])
+            if check_stock(driver, product["url"]):
+                in_stock_items.append(product["name"])
 
-            if in_stock:
-                msg = f"🟢 {product['name']} is IN STOCK at pincode {pin}!"
-                print(msg)
-                send_telegram(msg)
+        # ✅ SEND ONE COMBINED ALERT PER PINCODE
+        if in_stock_items:
+            product_list = "\n".join([f"• {p}" for p in in_stock_items])
+            msg = f"🟢 STOCK FOUND at pincode {pin}:\n{product_list}"
+            print(msg)
+            send_telegram(msg)
+        else:
+            print(f"❌ No stock at {pin}")
 
     finally:
         driver.quit()
+
+print("\n✅ Run completed.")
