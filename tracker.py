@@ -17,7 +17,6 @@ PRODUCTS = [
         "name": "iPhone 16 Black",
         "url": "https://www.bigbasket.com/pd/40330602/apple-iphone-16-128gb-black-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
     },
-
     {
         "name": "iPhone 17 Black",
         "url": "https://www.bigbasket.com/pd/40356300/apple-iphone-17-256gb-black-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
@@ -34,7 +33,14 @@ PRODUCTS = [
         "name": "iPhone 16 Teal",
         "url": "https://www.bigbasket.com/pd/40330606/apple-iphone-16-128gb-teal-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
     },
+]
 
+# ✅ EXACT DELIVERY LOCATIONS
+LOCATIONS = [
+    "Sikanderpur Metro, Gurgaon 122002",
+    "Sector 10A, Gurgaon 122001",
+    "Roots Courtyard, Gurgaon 122018",
+    "Sector 18, Gurgaon 122015",
 ]
 
 CHAT_IDS = [
@@ -43,8 +49,6 @@ CHAT_IDS = [
 ]
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-
-PINCODE_LIST = ["122001", "122002", "122018", "122015"]
 
 # ===========================================
 
@@ -79,34 +83,52 @@ def setup_driver():
     return driver
 
 
-def set_location(driver, pincode):
+def set_location(driver, location_text):
+    """Set exact delivery location"""
     try:
         driver.get("https://www.bigbasket.com/")
         time.sleep(5)
 
+        # Click location button
+        driver.find_element(
+            "xpath",
+            "//button[contains(@class,'AddressDropdown__ChangeLocation')]"
+        ).click()
+        time.sleep(3)
+
+        # Enter address
         box = driver.find_element(
-            "xpath", "//input[@placeholder='Enter your pincode']"
+            "xpath",
+            "//input[@placeholder='Search for area, street name…']"
         )
         box.clear()
-        box.send_keys(pincode)
-        time.sleep(2)
-
-        driver.find_element("xpath", "(//li)[1]").click()
+        box.send_keys(location_text)
         time.sleep(4)
 
-        print(f"📍 Location set: {pincode}")
+        # Click first suggestion
+        driver.find_element("xpath", "(//li)[1]").click()
+        time.sleep(6)
+
+        print(f"📍 Location set: {location_text}")
 
     except Exception as e:
-        print(f"Location error ({pincode}):", e)
+        print(f"❌ Location error ({location_text}):", e)
 
 
 def check_stock(driver, url):
     try:
         driver.get(url)
-        time.sleep(5)
+        time.sleep(6)
 
         page_text = driver.page_source.lower()
-        return "add to basket" in page_text
+
+        # ✅ robust stock detection
+        in_stock = (
+            "add to basket" in page_text
+            and "out of stock" not in page_text
+        )
+
+        return in_stock
 
     except Exception as e:
         print("Stock check error:", e)
@@ -115,33 +137,35 @@ def check_stock(driver, url):
 
 # ================= MAIN =================
 
-print("🚀 Optimized multi-product tracker started...")
+print("🚀 Exact-location multi-product tracker started...")
 
-for pin in PINCODE_LIST:
-    print(f"\n🔍 Checking pincode: {pin}")
+driver = setup_driver()
 
-    driver = setup_driver()  # ✅ ONE driver per pincode
-    in_stock_items = []
+alerts = []
 
-    try:
-        set_location(driver, pin)
+try:
+    for location in LOCATIONS:
+        print(f"\n🔍 Checking location: {location}")
+
+        set_location(driver, location)
 
         for product in PRODUCTS:
             print(f"🛒 Checking product: {product['name']}")
 
-            if check_stock(driver, product["url"]):
-                in_stock_items.append(product["name"])
+            in_stock = check_stock(driver, product["url"])
 
-        # ✅ SEND ONE COMBINED ALERT PER PINCODE
-        if in_stock_items:
-            product_list = "\n".join([f"• {p}" for p in in_stock_items])
-            msg = f"🟢 STOCK FOUND at pincode {pin}:\n{product_list}"
-            print(msg)
-            send_telegram(msg)
-        else:
-            print(f"❌ No stock at {pin}")
+            if in_stock:
+                alerts.append(
+                    f"🟢 {product['name']} IN STOCK at 📍 {location}"
+                )
 
-    finally:
-        driver.quit()
+finally:
+    driver.quit()
 
-print("\n✅ Run completed.")
+# ✅ SINGLE COMBINED ALERT
+if alerts:
+    final_message = "🚨 STOCK ALERT 🚨\n\n" + "\n".join(alerts)
+    print(final_message)
+    send_telegram(final_message)
+else:
+    print("❌ Nothing in stock anywhere.")
