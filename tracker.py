@@ -1,9 +1,12 @@
-import time
 import os
 import requests
+from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 # ================= CONFIG =================
@@ -11,31 +14,30 @@ from webdriver_manager.chrome import ChromeDriverManager
 PRODUCTS = [
     {
         "name": "iPhone 17 White",
-        "url": "https://www.bigbasket.com/pd/40356301/apple-iphone-17-256gb-white-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
-    },
-    {
-        "name": "iPhone 16 Black",
-        "url": "https://www.bigbasket.com/pd/40330602/apple-iphone-16-128gb-black-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+        "url": "https://www.bigbasket.com/pd/40356301/apple-iphone-17-256gb-white-1-unit/",
     },
     {
         "name": "iPhone 17 Black",
-        "url": "https://www.bigbasket.com/pd/40356300/apple-iphone-17-256gb-black-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+        "url": "https://www.bigbasket.com/pd/40356300/apple-iphone-17-256gb-black-1-unit/",
     },
     {
-        "name": "iPhone 17 mist blue",
-        "url": "https://www.bigbasket.com/pd/40356302/apple-iphone-17-256gb-mist-blue-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10"
+        "name": "iPhone 17 Mist Blue",
+        "url": "https://www.bigbasket.com/pd/40356302/apple-iphone-17-256gb-mist-blue-1-unit/",
     },
     {
-        "name": "iPhone 16 ultramarine",
-        "url": "https://www.bigbasket.com/pd/40330605/apple-iphone-16-128gb-ultramarine-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+        "name": "iPhone 16 Black",
+        "url": "https://www.bigbasket.com/pd/40330602/apple-iphone-16-128gb-black-1-n/",
+    },
+    {
+        "name": "iPhone 16 Ultramarine",
+        "url": "https://www.bigbasket.com/pd/40330605/apple-iphone-16-128gb-ultramarine-1-n/",
     },
     {
         "name": "iPhone 16 Teal",
-        "url": "https://www.bigbasket.com/pd/40330606/apple-iphone-16-128gb-teal-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+        "url": "https://www.bigbasket.com/pd/40330606/apple-iphone-16-128gb-teal-1-n/",
     },
 ]
 
-# ✅ EXACT DELIVERY LOCATIONS
 LOCATIONS = [
     "Sikanderpur Metro, Gurgaon 122002",
     "Sector 10A, Gurgaon 122001",
@@ -49,6 +51,8 @@ CHAT_IDS = [
 ]
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+
+WAIT_TIME = 12  # tuned for speed
 
 # ===========================================
 
@@ -71,43 +75,52 @@ def send_telegram(message):
 
 def setup_driver():
     chrome_options = Options()
+
+    # ⚡ SPEED BOOSTERS
+    chrome_options.page_load_strategy = "eager"
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-gpu")
+
+    # 🚀 Block images for speed
+    prefs = {"profile.managed_default_content_settings.images": 2}
+    chrome_options.add_experimental_option("prefs", prefs)
 
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
         options=chrome_options,
     )
+
+    driver.set_page_load_timeout(40)
     return driver
 
 
 def set_location(driver, location_text):
-    """Set exact delivery location"""
+    wait = WebDriverWait(driver, WAIT_TIME)
+
     try:
         driver.get("https://www.bigbasket.com/")
-        time.sleep(5)
 
-        # Click location button
-        driver.find_element(
-            "xpath",
+        wait.until(EC.element_to_be_clickable((
+            By.XPATH,
             "//button[contains(@class,'AddressDropdown__ChangeLocation')]"
-        ).click()
-        time.sleep(3)
+        ))).click()
 
-        # Enter address
-        box = driver.find_element(
-            "xpath",
-            "//input[@placeholder='Search for area, street name…']"
-        )
+        box = wait.until(EC.presence_of_element_located((
+            By.XPATH,
+            "//input[contains(@placeholder,'Search')]"
+        )))
         box.clear()
         box.send_keys(location_text)
-        time.sleep(4)
 
-        # Click first suggestion
-        driver.find_element("xpath", "(//li)[1]").click()
-        time.sleep(6)
+        wait.until(EC.element_to_be_clickable((
+            By.XPATH,
+            "(//li)[1]"
+        ))).click()
 
         print(f"📍 Location set: {location_text}")
 
@@ -118,17 +131,13 @@ def set_location(driver, location_text):
 def check_stock(driver, url):
     try:
         driver.get(url)
-        time.sleep(6)
-
         page_text = driver.page_source.lower()
 
-        # ✅ robust stock detection
-        in_stock = (
+        return (
             "add to basket" in page_text
             and "out of stock" not in page_text
+            and "currently unavailable" not in page_text
         )
-
-        return in_stock
 
     except Exception as e:
         print("Stock check error:", e)
@@ -137,35 +146,47 @@ def check_stock(driver, url):
 
 # ================= MAIN =================
 
-print("🚀 Exact-location multi-product tracker started...")
+print("⚡ Lightning-fast tracker started...")
 
 driver = setup_driver()
-
-alerts = []
+found_items = {}
 
 try:
     for location in LOCATIONS:
         print(f"\n🔍 Checking location: {location}")
-
         set_location(driver, location)
 
         for product in PRODUCTS:
             print(f"🛒 Checking product: {product['name']}")
 
-            in_stock = check_stock(driver, product["url"])
-
-            if in_stock:
-                alerts.append(
-                    f"🟢 {product['name']} IN STOCK at 📍 {location}"
+            if check_stock(driver, product["url"]):
+                found_items.setdefault(product["name"], []).append(
+                    (location, product["url"])
                 )
 
 finally:
     driver.quit()
 
-# ✅ SINGLE COMBINED ALERT
-if alerts:
-    final_message = "🚨 STOCK ALERT 🚨\n\n" + "\n".join(alerts)
+# ✅ PREMIUM COMBINED ALERT
+if found_items:
+    timestamp = datetime.now().strftime("%d %b %Y, %I:%M %p")
+
+    lines = [
+        "🚨 BIGBASKET STOCK ALERT 🚨",
+        f"🕒 {timestamp}",
+        ""
+    ]
+
+    for product_name, entries in found_items.items():
+        lines.append(f"📦 {product_name}")
+        for location, url in entries:
+            lines.append(f"   📍 {location}")
+            lines.append(f"   🔗 {url}")
+        lines.append("")
+
+    final_message = "\n".join(lines)
     print(final_message)
     send_telegram(final_message)
+
 else:
     print("❌ Nothing in stock anywhere.")
