@@ -52,7 +52,7 @@ CHAT_IDS = [
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-WAIT_TIME = 12  # tuned for speed
+WAIT_TIME = 20
 
 # ===========================================
 
@@ -76,17 +76,17 @@ def send_telegram(message):
 def setup_driver():
     chrome_options = Options()
 
-    # ⚡ SPEED BOOSTERS
     chrome_options.page_load_strategy = "eager"
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--disable-notifications")
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-gpu")
 
-    # 🚀 Block images for speed
+    # block images for speed
     prefs = {"profile.managed_default_content_settings.images": 2}
     chrome_options.add_experimental_option("prefs", prefs)
 
@@ -95,7 +95,7 @@ def setup_driver():
         options=chrome_options,
     )
 
-    driver.set_page_load_timeout(40)
+    driver.set_page_load_timeout(60)
     return driver
 
 
@@ -104,12 +104,15 @@ def set_location(driver, location_text):
 
     try:
         driver.get("https://www.bigbasket.com/")
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
+        # open location selector
         wait.until(EC.element_to_be_clickable((
             By.XPATH,
-            "//button[contains(@class,'AddressDropdown__ChangeLocation')]"
+            "//button[contains(@class,'AddressDropdown') or contains(.,'Select Location')]"
         ))).click()
 
+        # search box
         box = wait.until(EC.presence_of_element_located((
             By.XPATH,
             "//input[contains(@placeholder,'Search')]"
@@ -117,27 +120,51 @@ def set_location(driver, location_text):
         box.clear()
         box.send_keys(location_text)
 
-        wait.until(EC.element_to_be_clickable((
-            By.XPATH,
-            "(//li)[1]"
-        ))).click()
+        # wait suggestions
+        wait.until(EC.presence_of_element_located((By.XPATH, "//li")))
+
+        suggestions = driver.find_elements(By.XPATH, "//li")
+        if suggestions:
+            suggestions[0].click()
+        else:
+            print("❌ No location suggestions found")
+            return False
+
+        # wait for header refresh (location applied)
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "header")))
 
         print(f"📍 Location set: {location_text}")
+        return True
 
     except Exception as e:
         print(f"❌ Location error ({location_text}):", e)
+        return False
 
 
 def check_stock(driver, url):
+    wait = WebDriverWait(driver, WAIT_TIME)
+
     try:
         driver.get(url)
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "button")))
+
         page_text = driver.page_source.lower()
 
-        return (
-            "add to basket" in page_text
-            and "out of stock" not in page_text
-            and "currently unavailable" not in page_text
-        )
+        if any(x in page_text for x in [
+            "out of stock",
+            "currently unavailable",
+            "notify me"
+        ]):
+            return False
+
+        if any(x in page_text for x in [
+            "add to basket",
+            "add to cart",
+            ">add<"
+        ]):
+            return True
+
+        return False
 
     except Exception as e:
         print("Stock check error:", e)
@@ -146,7 +173,7 @@ def check_stock(driver, url):
 
 # ================= MAIN =================
 
-print("⚡ Lightning-fast tracker started...")
+print("🚀 Bulletproof tracker started...")
 
 driver = setup_driver()
 found_items = {}
@@ -154,7 +181,9 @@ found_items = {}
 try:
     for location in LOCATIONS:
         print(f"\n🔍 Checking location: {location}")
-        set_location(driver, location)
+
+        if not set_location(driver, location):
+            continue
 
         for product in PRODUCTS:
             print(f"🛒 Checking product: {product['name']}")
@@ -167,7 +196,7 @@ try:
 finally:
     driver.quit()
 
-# ✅ PREMIUM COMBINED ALERT
+# ✅ PREMIUM ALERT
 if found_items:
     timestamp = datetime.now().strftime("%d %b %Y, %I:%M %p")
 
