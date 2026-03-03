@@ -106,40 +106,48 @@ def set_location(driver, location_text):
         driver.get("https://www.bigbasket.com/")
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-        # open location selector
-        wait.until(EC.element_to_be_clickable((
-            By.XPATH,
-            "//button[contains(@class,'AddressDropdown') or contains(.,'Select Location')]"
-        ))).click()
+        # 🔹 Try opening location selector (multiple strategies)
+        try:
+            location_btn = wait.until(EC.element_to_be_clickable((
+                By.XPATH,
+                "//button[contains(@class,'AddressDropdown') or contains(@class,'location')]"
+            )))
+            location_btn.click()
+        except:
+            # fallback click via JS
+            driver.execute_script("""
+                const btn = document.querySelector('button');
+                if (btn) btn.click();
+            """)
 
-        # search box
+        # 🔹 Wait for search box
         box = wait.until(EC.presence_of_element_located((
             By.XPATH,
-            "//input[contains(@placeholder,'Search')]"
+            "//input[contains(@placeholder,'Search') or contains(@placeholder,'location')]"
         )))
+
         box.clear()
         box.send_keys(location_text)
 
-        # wait suggestions
+        # 🔹 Wait for suggestions
         wait.until(EC.presence_of_element_located((By.XPATH, "//li")))
 
         suggestions = driver.find_elements(By.XPATH, "//li")
+
         if suggestions:
-            suggestions[0].click()
+            driver.execute_script("arguments[0].click();", suggestions[0])
         else:
             print("❌ No location suggestions found")
             return False
 
-        # wait for header refresh (location applied)
+        # 🔹 give time to apply location
         wait.until(EC.presence_of_element_located((By.TAG_NAME, "header")))
-
         print(f"📍 Location set: {location_text}")
         return True
 
     except Exception as e:
         print(f"❌ Location error ({location_text}):", e)
         return False
-
 
 def check_stock(driver, url):
     wait = WebDriverWait(driver, WAIT_TIME)
