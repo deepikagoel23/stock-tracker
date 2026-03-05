@@ -122,32 +122,31 @@ def set_location(driver, pincode):
 
 
 def check_stock(driver, url):
+    wait = WebDriverWait(driver, WAIT_TIME)
+
     try:
         driver.get(url)
 
-        time.sleep(5)
+        # wait for product page
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-        page = driver.page_source.lower()
+        # look for ADD button
+        buttons = driver.find_elements(By.XPATH, "//button")
 
-        if any(x in page for x in [
-            "out of stock",
-            "currently unavailable",
-            "notify me"
-        ]):
-            return False
+        for btn in buttons:
+            text = btn.text.lower()
 
-        if any(x in page for x in [
-            "add to basket",
-            "add to cart"
-        ]):
-            return True
+            if "add" in text and ("basket" in text or "cart" in text):
+                return True
+
+            if "notify" in text or "out of stock" in text:
+                return False
 
         return False
 
     except Exception as e:
         print("Stock check error:", e)
         return False
-
 
 # ================= MAIN =================
 
