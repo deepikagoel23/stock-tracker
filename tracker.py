@@ -14,6 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 
 # ================= CONFIG =================
+WAIT_TIME = 20
 
 PRODUCTS = [
     {
