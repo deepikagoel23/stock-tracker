@@ -39,10 +39,10 @@ PRODUCTS = [
 ]
 
 LOCATIONS = [
-    "Sikanderpur Metro, Gurgaon 122002",
-    "Sector 10A, Gurgaon 122001",
-    "Roots Courtyard, Gurgaon 122018",
-    "Sector 18, Gurgaon 122015",
+    "122002",
+    "122001",
+    "122018",
+    "122015",
 ]
 
 CHAT_IDS = [
