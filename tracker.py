@@ -37,7 +37,7 @@ PRODUCTS = [
 ]
 
 PINCODES = [
-    "122001",
+    "Sikander pur metro,122001",
     "122002",
     "122018",
     "122015",
