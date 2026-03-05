@@ -37,10 +37,10 @@ PRODUCTS = [
 ]
 
 PINCODES = [
-    "Sikander pur metro,122001",
-    "122002",
-    "122018",
-    "122015",
+    "Sector 10A,122001",
+    "Sikander pur metro,122002",
+    "Roots Courtyard,122018",
+    "Sector 18,122015",
 ]
 
 CHAT_IDS = [
