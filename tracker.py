@@ -1,6 +1,6 @@
+import time
 import os
 import requests
-from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -17,32 +17,25 @@ PRODUCTS = [
         "url": "https://www.bigbasket.com/pd/40356301/apple-iphone-17-256gb-white-1-unit/",
     },
     {
-        "name": "iPhone 17 Black",
-        "url": "https://www.bigbasket.com/pd/40356300/apple-iphone-17-256gb-black-1-unit/",
-    },
-    {
-        "name": "iPhone 17 Mist Blue",
-        "url": "https://www.bigbasket.com/pd/40356302/apple-iphone-17-256gb-mist-blue-1-unit/",
-    },
-    {
         "name": "iPhone 16 Black",
         "url": "https://www.bigbasket.com/pd/40330602/apple-iphone-16-128gb-black-1-n/",
     },
     {
-        "name": "iPhone 16 Ultramarine",
-        "url": "https://www.bigbasket.com/pd/40330605/apple-iphone-16-128gb-ultramarine-1-n/",
+        "name": "iPhone 17 Black",
+        "url": "https://www.bigbasket.com/pd/40356300/apple-iphone-17-256gb-black-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
+    },
+    {
+        "name": "iPhone 17 mist blue",
+        "url": "https://www.bigbasket.com/pd/40356302/apple-iphone-17-256gb-mist-blue-1-unit/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10"
+    },
+    {
+        "name": "iPhone 16 ultramarine",
+        "url": "https://www.bigbasket.com/pd/40330605/apple-iphone-16-128gb-ultramarine-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
     },
     {
         "name": "iPhone 16 Teal",
-        "url": "https://www.bigbasket.com/pd/40330606/apple-iphone-16-128gb-teal-1-n/",
+        "url": "https://www.bigbasket.com/pd/40330606/apple-iphone-16-128gb-teal-1-n/?utm_source=bigbasket&utm_medium=share_product&utm_campaign=share_product&ec_id=10",
     },
-]
-
-LOCATIONS = [
-    "122002",
-    "122001",
-    "122018",
-    "122015",
 ]
 
 CHAT_IDS = [
@@ -52,12 +45,13 @@ CHAT_IDS = [
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-WAIT_TIME = 20
+PINCODE_LIST = ["122001", "122002", "122018", "122015"]
 
 # ===========================================
 
 
 def send_telegram(message):
+    """Send ONE combined message to all users"""
     api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
 
     for chat_id in CHAT_IDS:
@@ -74,103 +68,78 @@ def send_telegram(message):
 
 
 def setup_driver():
+    """Fast headless Chrome"""
     chrome_options = Options()
-
-    chrome_options.page_load_strategy = "eager"
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("--disable-notifications")
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-gpu")
-
-    # block images for speed
-    prefs = {"profile.managed_default_content_settings.images": 2}
-    chrome_options.add_experimental_option("prefs", prefs)
 
     driver = webdriver.Chrome(
         service=Service(ChromeDriverManager().install()),
         options=chrome_options,
     )
-
     driver.set_page_load_timeout(60)
     return driver
 
 
-def set_location(driver, location_text):
-    wait = WebDriverWait(driver, WAIT_TIME)
-
+def set_location(driver, pincode):
+    """Accurate BigBasket location setter"""
     try:
         driver.get("https://www.bigbasket.com/")
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-        # 🔹 Try opening location selector (multiple strategies)
-        try:
-            location_btn = wait.until(EC.element_to_be_clickable((
-                By.XPATH,
-                "//button[contains(@class,'AddressDropdown') or contains(@class,'location')]"
-            )))
-            location_btn.click()
-        except:
-            # fallback click via JS
-            driver.execute_script("""
-                const btn = document.querySelector('button');
-                if (btn) btn.click();
-            """)
+        wait = WebDriverWait(driver, 15)
 
-        # 🔹 Wait for search box
-        box = wait.until(EC.presence_of_element_located((
-            By.XPATH,
-            "//input[contains(@placeholder,'Search') or contains(@placeholder,'location')]"
-        )))
+        # 🔥 open location box
+        location_box = wait.until(
+            EC.element_to_be_clickable(
+                (By.XPATH, "//input[@placeholder='Enter your pincode']")
+            )
+        )
 
-        box.clear()
-        box.send_keys(location_text)
+        location_box.clear()
+        location_box.send_keys(pincode)
 
-        # 🔹 Wait for suggestions
-        wait.until(EC.presence_of_element_located((By.XPATH, "//li")))
+        # 🔥 wait for suggestion and click FIRST REAL match
+        suggestion = wait.until(
+            EC.element_to_be_clickable(
+                (By.XPATH, "//li[contains(@class,'flex items-center')]")
+            )
+        )
+        suggestion.click()
 
-        suggestions = driver.find_elements(By.XPATH, "//li")
+        # 🔥 wait until location applied
+        time.sleep(4)
 
-        if suggestions:
-            driver.execute_script("arguments[0].click();", suggestions[0])
-        else:
-            print("❌ No location suggestions found")
-            return False
-
-        # 🔹 give time to apply location
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "header")))
-        print(f"📍 Location set: {location_text}")
+        print(f"📍 Location set correctly: {pincode}")
         return True
 
     except Exception as e:
-        print(f"❌ Location error ({location_text}):", e)
+        print(f"❌ Location failed ({pincode}):", e)
         return False
 
-def check_stock(driver, url):
-    wait = WebDriverWait(driver, WAIT_TIME)
 
+def check_stock(driver, url):
+    """Accurate stock detection"""
     try:
         driver.get(url)
-        wait.until(EC.presence_of_element_located((By.TAG_NAME, "button")))
+        wait = WebDriverWait(driver, 15)
+
+        # wait for page to stabilize
+        time.sleep(4)
 
         page_text = driver.page_source.lower()
 
-        if any(x in page_text for x in [
-            "out of stock",
-            "currently unavailable",
-            "notify me"
-        ]):
+        # ✅ STRICT checks (prevents false positives)
+        if "add to basket" in page_text:
+            return True
+
+        if "currently unavailable" in page_text:
             return False
 
-        if any(x in page_text for x in [
-            "add to basket",
-            "add to cart",
-            ">add<"
-        ]):
-            return True
+        if "out of stock" in page_text:
+            return False
 
         return False
 
@@ -181,49 +150,34 @@ def check_stock(driver, url):
 
 # ================= MAIN =================
 
-print("🚀 Bulletproof tracker started...")
+print("🚀 FAST & ACCURATE TRACKER STARTED")
 
 driver = setup_driver()
-found_items = {}
+alerts = []
 
 try:
-    for location in LOCATIONS:
-        print(f"\n🔍 Checking location: {location}")
+    for pin in PINCODE_LIST:
+        print(f"\n📍 Checking pincode: {pin}")
 
-        if not set_location(driver, location):
+        if not set_location(driver, pin):
             continue
 
         for product in PRODUCTS:
-            print(f"🛒 Checking product: {product['name']}")
+            print(f"🔍 Checking {product['name']}")
 
-            if check_stock(driver, product["url"]):
-                found_items.setdefault(product["name"], []).append(
-                    (location, product["url"])
-                )
+            in_stock = check_stock(driver, product["url"])
+
+            if in_stock:
+                alerts.append(f"🟢 {product['name']} → {pin}")
 
 finally:
     driver.quit()
 
-# ✅ PREMIUM ALERT
-if found_items:
-    timestamp = datetime.now().strftime("%d %b %Y, %I:%M %p")
+# ================= ALERT =================
 
-    lines = [
-        "🚨 BIGBASKET STOCK ALERT 🚨",
-        f"🕒 {timestamp}",
-        ""
-    ]
-
-    for product_name, entries in found_items.items():
-        lines.append(f"📦 {product_name}")
-        for location, url in entries:
-            lines.append(f"   📍 {location}")
-            lines.append(f"   🔗 {url}")
-        lines.append("")
-
-    final_message = "\n".join(lines)
-    print(final_message)
-    send_telegram(final_message)
-
+if alerts:
+    message = "🔥 STOCK ALERT 🔥\n\n" + "\n".join(alerts)
+    send_telegram(message)
+    print("✅ Alert sent")
 else:
-    print("❌ Nothing in stock anywhere.")
+    print("❌ Nothing in stock")
